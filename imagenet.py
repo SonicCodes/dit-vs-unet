@@ -60,7 +60,7 @@ def get_dataset(batch_size=32, train=False):
         stacked_latents = jnp.stack(latents)#.transpose((0, 2, 3, 1))
         stacked_labels = jnp.stack(labels)
         # print (stacked_latents.shape, stacked_labels.shape)
-        return stacked_latents, stacked_labels
+        return stacked_latents*0.13025, stacked_labels
 
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,  collate_fn=collate_fn, drop_last=True)
 

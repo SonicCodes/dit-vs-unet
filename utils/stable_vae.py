@@ -22,7 +22,8 @@ class StableVAE:
         #     "stabilityai/stable-diffusion-xl-base-1.0", subfolder="vae"
         # )
         module, params = FlaxAutoencoderKL.from_pretrained(
-            "pcuenq/sd-vae-ft-mse-flax"
+            "stabilityai/sdxl-vae",
+            from_pt=True
         )
         params = jax.device_get(params)
         return cls(
