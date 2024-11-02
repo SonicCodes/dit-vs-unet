@@ -25,7 +25,7 @@ class MlpBlock(nn.Module):
     """Transformer MLP / feed-forward block."""
 
     mlp_dim: int
-    dtype: Dtype = jnp.float32
+    dtype: Dtype = jnp.bfloat16
     out_dim: Optional[int] = None
     dropout_rate: float = None
     kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = nn.initializers.xavier_uniform()
