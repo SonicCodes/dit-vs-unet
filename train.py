@@ -134,7 +134,7 @@ class FlowTrainer(flax.struct.PyTreeNode):
 @click.option('--log_interval', default=1000, type=int, help='Logging interval.')
 @click.option('--eval_interval', default=20000, type=int, help='Evaluation interval.')
 @click.option('--save_interval', default=200000, type=int, help='Model saving interval.')
-@click.option('--batch_size', default=1024, type=int, help='Batch size.')
+@click.option('--batch_size', default=256, type=int, help='Batch size.')
 @click.option('--max_steps', default=100_000, type=int, help='Number of training steps.')
 @click.option('--model_type', default='dit', help='dit or unet')
 @click.option('--model_size', default=10, help='10 or 50')
