@@ -1,0 +1,13 @@
+env/**
+local_train_dir/**
+vae_mds/**
+env
+*.log
+*.csv
+wandb/**
+*.wandb
+*.pyc
+data/**
+*.npy
+*.json
+*.pickle

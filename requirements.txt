@@ -1,0 +1,8 @@
+flax
+optax
+psgd_jax
+einops
+mosaicml-streaming
+wandb
+diffusers
+jaxtyping
