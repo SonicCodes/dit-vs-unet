@@ -127,18 +127,19 @@ class DiTBlock(nn.Module):
     def __call__(self, x, c):
         # Calculate adaLn modulation parameters.
         c = nn.silu(c)
-        c = nn.Dense(6 * self.hidden_size, kernel_init=nn.initializers.constant(0.))(c)
+        c = nn.Dense(6 * self.hidden_size, kernel_init=nn.initializers.constant(0.), dtype=jnp.bfloat16)(c)
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = jnp.split(c, 6, axis=-1)
 
         # Attention Residual.
-        x_norm = nn.LayerNorm(use_bias=False, use_scale=False)(x)
+        x_norm = nn.LayerNorm(use_bias=False, use_scale=False, dtype=jnp.bfloat16)(x)
         x_modulated = modulate(x_norm, shift_msa, scale_msa)
         attn_x = nn.MultiHeadDotProductAttention(kernel_init=nn.initializers.xavier_uniform(),
+        dtype=jnp.bfloat16,
             num_heads=self.num_heads)(x_modulated, x_modulated)
         x = x + (gate_msa[:, None] * attn_x)
 
         # MLP Residual.
-        x_norm2 = nn.LayerNorm(use_bias=False, use_scale=False)(x)
+        x_norm2 = nn.LayerNorm(use_bias=False, use_scale=False, dtype=jnp.bfloat16)(x)
         x_modulated2 = modulate(x_norm2, shift_mlp, scale_mlp)
         mlp_x = MlpBlock(mlp_dim=int(self.hidden_size * self.mlp_ratio))(x_modulated2)
         x = x + (gate_mlp[:, None] * mlp_x)
@@ -155,11 +156,11 @@ class FinalLayer(nn.Module):
     @nn.compact
     def __call__(self, x, c):
         c = nn.silu(c)
-        c = nn.Dense(2 * self.hidden_size, kernel_init=nn.initializers.constant(0))(c)
+        c = nn.Dense(2 * self.hidden_size, kernel_init=nn.initializers.constant(0), dtype=jnp.bfloat16)(c)
         shift, scale = jnp.split(c, 2, axis=-1)
         x = modulate(nn.LayerNorm(use_bias=False, use_scale=False)(x), shift, scale)
         x = nn.Dense(self.patch_size * self.patch_size * self.out_channels,
-                     kernel_init=nn.initializers.constant(0))(x)
+                     kernel_init=nn.initializers.constant(0), dtype=jnp.bfloat16)(x)
         return x
 
 class DiT(nn.Module):
