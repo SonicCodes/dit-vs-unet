@@ -227,7 +227,7 @@ def main(load_dir, save_dir, fid_stats, seed, log_interval, eval_interval, save_
 
     if psgd:
         from psgd_jax.kron import kron
-        tx  = kron(learning_rate=model_config['kron_lr'], b1=model_config['kron_beta1'], max_size_triangular=4000, trust_region_scale=2.0)
+        tx  = kron(learning_rate=model_config['kron_lr'], b1=model_config['kron_beta1'], max_size_triangular=4000, trust_region_scale=1.5, precond_update_precision="float32")
     else:
         tx = optax.adam(learning_rate=model_config['adam_lr'], b1=model_config['adam_beta1'], b2=model_config['adam_beta2'])
 
