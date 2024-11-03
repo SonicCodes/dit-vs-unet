@@ -1,5 +1,6 @@
 import math
 from typing import Any, Tuple
+from pprint import pprint
 import flax.linen as nn
 from flax.linen.initializers import xavier_uniform
 import jax
@@ -122,6 +123,7 @@ class DiTBlock(nn.Module):
     hidden_size: int
     num_heads: int
     mlp_ratio: float = 4.0
+    scan_blocks: bool = False
 
     @nn.compact
     def __call__(self, x, c):
@@ -143,6 +145,9 @@ class DiTBlock(nn.Module):
         x_modulated2 = modulate(x_norm2, shift_mlp, scale_mlp)
         mlp_x = MlpBlock(mlp_dim=int(self.hidden_size * self.mlp_ratio))(x_modulated2)
         x = x + (gate_mlp[:, None] * mlp_x)
+        if self.scan_blocks:
+            # carry, ys
+            return x, None
         return x
 
 class FinalLayer(nn.Module):
@@ -175,6 +180,7 @@ class DiT(nn.Module):
     class_dropout_prob: float
     num_classes: int
     learn_sigma: bool = False
+    scan_blocks: bool = False
 
     @nn.compact
     def __call__(self, x, t, y, train=False, force_drop_ids=None):
@@ -196,58 +202,69 @@ class DiT(nn.Module):
         y = LabelEmbedder(self.class_dropout_prob, self.num_classes, self.hidden_size)(
             y, train=train, force_drop_ids=force_drop_ids) # (B, hidden_size)
         c = t + y
-        for _ in range(self.depth):
-            x = DiTBlock(self.hidden_size, self.num_heads, self.mlp_ratio)(x, c)
+        if self.scan_blocks:
+            x, _ = nn.scan(
+                DiTBlock,
+                variable_axes={True: 0},
+                split_rngs={True: True},
+                length=self.depth,
+                in_axes=nn.broadcast,  # broadcast 'c' to all blocks
+            )(self.hidden_size, self.num_heads, self.mlp_ratio, self.scan_blocks)(x, c)
+        else:
+            for _ in range(self.depth):
+                x = DiTBlock(self.hidden_size, self.num_heads, self.mlp_ratio, self.scan_blocks)(x, c)
         x = FinalLayer(self.patch_size, out_channels, self.hidden_size)(x, c) # (B, num_patches, p*p*c)
         x = jnp.reshape(x, (batch_size, num_patches_side, num_patches_side,
                             self.patch_size, self.patch_size, out_channels))
         x = jnp.einsum('bhwpqc->bhpwqc', x)
         x = rearrange(x, 'B H P W Q C -> B (H P) (W Q) C', H=int(num_patches_side), W=int(num_patches_side))
-        
+
         assert x.shape == (batch_size, input_size, input_size, out_channels)
         x = x.transpose((0, 3, 1, 2)) # (B, C, H, W)
         return x
 
 # we have 4 classes of models, 10M, 50M, 100M, 500M
-def DiT10M(patch_size, num_classes, class_dropout_prob):
-    return DiT(patch_size, 256, 9, 4, 4.0, class_dropout_prob, num_classes, False)
-def DiT50M(patch_size, num_classes, class_dropout_prob):
-    return DiT(patch_size, 480, 12, 8, 4.0, class_dropout_prob, num_classes, False)
-def DiT100M(patch_size, num_classes, class_dropout_prob):
-    return DiT(patch_size, 512, 16, 16, 4.0, class_dropout_prob, num_classes, False)
-# def DiT500M(patch_size, num_classes, class_dropout_prob):
-#     return DiT(patch_size, 1152, 21, 16, 4.0, class_dropout_prob, num_classes, False)
-def DiTXL(patch_size, num_classes, class_dropout_prob):
-    return DiT(patch_size, 1152, 28, 16, 4.0, class_dropout_prob, num_classes, False)
+def DiT10M(patch_size, num_classes, class_dropout_prob, scan_blocks):
+    return DiT(patch_size, 256, 9, 4, 4.0, class_dropout_prob, num_classes, False, scan_blocks)
+def DiT50M(patch_size, num_classes, class_dropout_prob, scan_blocks):
+    return DiT(patch_size, 480, 12, 8, 4.0, class_dropout_prob, num_classes, False, scan_blocks)
+def DiT100M(patch_size, num_classes, class_dropout_prob, scan_blocks):
+    return DiT(patch_size, 512, 16, 16, 4.0, class_dropout_prob, num_classes, False, scan_blocks)
+# def DiT500M(patch_size, num_classes, class_dropout_prob, scan_blocks):
+#     return DiT(patch_size, 1152, 21, 16, 4.0, class_dropout_prob, num_classes, False, scan_blocks)
+def DiTXL(patch_size, num_classes, class_dropout_prob, scan_blocks):
+    return DiT(patch_size, 1152, 28, 16, 4.0, class_dropout_prob, num_classes, False, scan_blocks)
 # tests to make sure :3
-def test_DiT(size=10):
+def test_DiT(size=10, scan_blocks=False):
     # initialize model
-    fake_input = jnp.ones((1, 32, 32, 4), jnp.float32)
+    fake_input = jnp.ones((1, 4, 32, 32), jnp.float32)
     fake_t = jnp.ones((1,), jnp.int32)
     fake_y = jnp.ones((1,), jnp.int32)
     if size == 10:
-        model = DiT10M(2, 10, 0.1)
+        model = DiT10M(2, 10, 0.1, scan_blocks)
     elif size == 50:
-        model = DiT50M(2, 10, 0.1)
+        model = DiT50M(2, 10, 0.1, scan_blocks)
     elif size == 100:
-        model = DiT100M(2, 10, 0.1)
+        model = DiT100M(2, 10, 0.1, scan_blocks)
     elif size == 500:
-        model = DiT500M(2, 10, 0.1)
+        model = DiTXL(2, 10, 0.1, scan_blocks)
 
     tabulated_output = nn.tabulate(model, jax.random.key(0), compute_flops=True, depth=1)
     print(tabulated_output(x=fake_input, y=fake_y, t=fake_t))
 
     params = model.init(jax.random.PRNGKey(0), fake_input, fake_t, fake_y, train=True)
+    print("Parameter shapes:")
+    pprint(jax.tree.map(lambda x: x.shape, params), width=120)
     # test forward pass
     y = model.apply(params, fake_input, fake_t, fake_y, train=True, rngs={'label_dropout': jax.random.PRNGKey(0)})
     # how many parameters?
-    n_params = sum([p.size for p in jax.tree_leaves(params)])
+    n_params = sum([p.size for p in jax.tree.leaves(params)])
     print(y.shape, n_params)
-    assert y.shape == (1, 32, 32, 4)
+    assert y.shape == (1, 4, 32, 32)
 
 if __name__ == "__main__":
     # test_DiT(10)
     # test_DiT(50)
     # test_DiT(100)
-    test_DiT(100)
+    test_DiT(100, scan_blocks=True)
     print("All tests passed!")

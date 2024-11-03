@@ -1,4 +1,3 @@
-
 from typing import Any
 import jax.numpy as jnp
 import numpy as np
@@ -138,12 +137,14 @@ class FlowTrainer(flax.struct.PyTreeNode):
 @click.option('--max_steps', default=100_000, type=int, help='Number of training steps.')
 @click.option('--model_type', default='dit', help='dit or unet')
 @click.option('--model_size', default=10, help='10 or 50')
+@click.option('--scan_blocks', default=False, is_flag=True)
 @click.option('--denoise_timesteps', default=100, help='Number of timesteps to denoise.')
 @click.option('--_cfg_scale', default=2.0, help='Number of timesteps to denoise.')
 @click.option('--psgd', default=False, is_flag=True)
 @click.option('--repa', default=False, is_flag=True)
 def main(load_dir, save_dir, fid_stats, seed, log_interval, eval_interval, save_interval,
-         batch_size, max_steps, model_type, model_size, denoise_timesteps, _cfg_scale, psgd, repa):
+         batch_size, max_steps, model_type, model_size, scan_blocks, denoise_timesteps, 
+         _cfg_scale, psgd, repa):
     # jax distributed training setup
     jax.distributed.initialize()
     # Set default seed if not specified
@@ -153,9 +154,7 @@ def main(load_dir, save_dir, fid_stats, seed, log_interval, eval_interval, save_
 
     # Define model configuration
 
-
     # Preset configurations
-
 
     # Wandb configuration
     wandb_config = {}
@@ -178,14 +177,11 @@ def main(load_dir, save_dir, fid_stats, seed, log_interval, eval_interval, save_
     if jax.process_index() == 0:
         wandb.init(**wandb_config)
 
-
-
     # Data loading
     dataset = get_dataset(batch_size=local_batch_size, train=True)
     dataset_valid = get_dataset(batch_size=local_batch_size, train=False)
     example_obs, example_labels = next(dataset)
     example_obs = example_obs[:1]
-
 
     rng = jax.random.PRNGKey(seed)
     rng, param_key, dropout_key = jax.random.split(rng, 3)
@@ -202,13 +198,13 @@ def main(load_dir, save_dir, fid_stats, seed, log_interval, eval_interval, save_
 
     if model_type == 'dit':
         if model_size == 10:
-            model_def = DiT10M(2, model_config["num_classes"], model_config['class_dropout_prob'])
+            model_def = DiT10M(2, model_config["num_classes"], model_config['class_dropout_prob'], scan_blocks)
         elif model_size == 50:
-            model_def = DiT50M(2, model_config["num_classes"], model_config['class_dropout_prob'])
+            model_def = DiT50M(2, model_config["num_classes"], model_config['class_dropout_prob'], scan_blocks)
         elif model_size == 100:
-            model_def = DiT100M(2, model_config["num_classes"], model_config['class_dropout_prob'])
+            model_def = DiT100M(2, model_config["num_classes"], model_config['class_dropout_prob'], scan_blocks)
         elif model_size == 500:
-            model_def = DiTXL(2, model_config["num_classes"], model_config['class_dropout_prob'])
+            model_def = DiTXL(2, model_config["num_classes"], model_config['class_dropout_prob'], scan_blocks)
         else:
             raise ValueError("Invalid model size")
     elif model_type == 'unet':
@@ -227,10 +223,25 @@ def main(load_dir, save_dir, fid_stats, seed, log_interval, eval_interval, save_
 
     if psgd:
         from psgd_jax.kron import kron
-        tx  = kron(learning_rate=model_config['kron_lr'], b1=model_config['kron_beta1'], max_size_triangular=6144, trust_region_scale=1.5)#, precond_update_precision="float32")
+        if scan_blocks and model_type == 'dit':  # only dit supports scan rn
+            all_false = jax.tree.map(lambda _: False, params)
+            scanned_layers = flax.traverse_util.ModelParamTraversal(
+                lambda p, _: "scan" in p or "Scan" in p
+            ).update(lambda _: True, all_false)
+        else:
+            scanned_layers = None
+        tx = kron(
+            learning_rate=model_config["kron_lr"],
+            b1=model_config["kron_beta1"],
+            max_size_triangular=6144,
+            trust_region_scale=1.5,
+            scanned_layers=scanned_layers,
+            lax_map_scanned_layers=True,  # useful for larger models that can't be vmapped all at once
+            lax_map_batch_size=7,  # ideally should be a factor of depth (e.g. 7 for 28 layer net)
+            # precond_update_precision="float32"
+        )
     else:
         tx = optax.adam(learning_rate=model_config['adam_lr'], b1=model_config['adam_beta1'], b2=model_config['adam_beta2'])
-
 
     model_ts = TrainState.create(model_def, params=params, tx=tx)
     model_ts_eps = TrainState.create(model_def, params=params)
@@ -260,8 +271,6 @@ def main(load_dir, save_dir, fid_stats, seed, log_interval, eval_interval, save_
     visualize_labels = example_labels.reshape((device_count, -1, *example_labels.shape[1:]))
     visualize_labels = visualize_labels[:, 0:1]
     imagenet_labels = open('./imagenet_labels.txt').read().splitlines()
-
-
 
     ###################################
     # Training Loop
