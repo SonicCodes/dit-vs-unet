@@ -45,7 +45,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
-from scalable_shampoo.optax.quantization_utils import QuantizedValue
+from quant_utils import QuantizedValue
 
 # Dtype for inverse-pth root routine
 # Switch to f64 if you have hardware that supports it. Enable the jax flag
