@@ -233,7 +233,7 @@ def main(load_dir, save_dir, fid_stats, seed, log_interval, eval_interval, save_
         tx = kron(
             learning_rate=model_config["kron_lr"],
             b1=model_config["kron_beta1"],
-            max_size_triangular=6144,
+            max_size_triangular=4000,
             trust_region_scale=1.5,
             scanned_layers=scanned_layers,
             lax_map_scanned_layers=True,  # useful for larger models that can't be vmapped all at once
