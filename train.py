@@ -16,7 +16,7 @@ from dit import DiT10M, DiT50M, DiT100M, DiTXL
 from unet import UNet10M, UNet50M
 from functools import partial
 from imagenet import get_dataset
-from shampoo import Shampoo
+from shampoo import distributed_shampoo
 model_config = {
     'adam_lr': 1e-4,
     'adam_beta1': 0.9,
@@ -246,7 +246,7 @@ def main(load_dir, save_dir, fid_stats, seed, log_interval, eval_interval, save_
             # precond_update_precision="float32"
         )
     elif shampoo:
-        tx = Shampoo(learning_rate=model_config["shampoo_lr"], beta1=model_config["shampoo_beta1"], beta2=model_config["shampoo_beta2"])
+        tx = distributed_shampoo(model_config["shampoo_lr"], 128, beta1=model_config["shampoo_beta1"], beta2=model_config["shampoo_beta2"])
     else:
         tx = optax.adam(learning_rate=model_config['adam_lr'], b1=model_config['adam_beta1'], b2=model_config['adam_beta2'])
 
