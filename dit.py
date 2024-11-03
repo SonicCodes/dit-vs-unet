@@ -203,8 +203,13 @@ class DiT(nn.Module):
             y, train=train, force_drop_ids=force_drop_ids) # (B, hidden_size)
         c = t + y
         if self.scan_blocks:
-            x, _ = nn.scan(
+            block_cls = nn.remat(
                 DiTBlock,
+                prevent_cse=False,  # we're within scan here
+                policy=jax.checkpoint_policies.checkpoint_dots_with_no_batch_dims,
+            )
+            x, _ = nn.scan(
+                block_cls,
                 variable_axes={True: 0},
                 split_rngs={True: True},
                 length=self.depth,
