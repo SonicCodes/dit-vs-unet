@@ -16,11 +16,15 @@ from dit import DiT10M, DiT50M, DiT100M, DiTXL
 from unet import UNet10M, UNet50M
 from functools import partial
 from imagenet import get_dataset
-
+from shampoo import Shampoo
 model_config = {
     'adam_lr': 1e-4,
     'adam_beta1': 0.9,
     'adam_beta2': 0.99,
+    'shampoo_lr': 1e-4,
+    'shampoo_beta1': 0.9,
+    'shampoo_beta2': 0.99,
+
     'kron_lr': 7e-5,
     'kron_beta1': 0.9,
     'class_dropout_prob': 0.1,
@@ -142,9 +146,10 @@ class FlowTrainer(flax.struct.PyTreeNode):
 @click.option('--_cfg_scale', default=2.0, help='Number of timesteps to denoise.')
 @click.option('--psgd', default=False, is_flag=True)
 @click.option('--repa', default=False, is_flag=True)
+@click.option('--shampoo', default=False, is_flag=True)
 def main(load_dir, save_dir, fid_stats, seed, log_interval, eval_interval, save_interval,
          batch_size, max_steps, model_type, model_size, scan_blocks, denoise_timesteps, 
-         _cfg_scale, psgd, repa):
+         _cfg_scale, psgd, repa, shampoo):
     # jax distributed training setup
     jax.distributed.initialize()
     # Set default seed if not specified
@@ -240,6 +245,8 @@ def main(load_dir, save_dir, fid_stats, seed, log_interval, eval_interval, save_
             lax_map_batch_size=7,  # ideally should be a factor of depth (e.g. 7 for 28 layer net)
             # precond_update_precision="float32"
         )
+    elif shampoo:
+        tx = Shampoo(learning_rate=model_config["shampoo_lr"], beta1=model_config["shampoo_beta1"], beta2=model_config["shampoo_beta2"])
     else:
         tx = optax.adam(learning_rate=model_config['adam_lr'], b1=model_config['adam_beta1'], b2=model_config['adam_beta2'])
 
