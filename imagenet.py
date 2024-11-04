@@ -33,7 +33,7 @@ class ImageNetDataset(Dataset):
     def __getitem__(self, _idx):
         idx = self.indices[_idx]
         image = self.data[idx]
-        label = self.labels[idx][0]
+        label = int(self.labels[idx][0])
         image = image.astype(np.float32).transpose(2, 0, 1)
         # image = (image / 255.0 - 0.5) * 24.0
         return image, label#, label_text
