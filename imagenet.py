@@ -9,7 +9,7 @@ from torch.utils.data import Dataset, DataLoader, distributed
 import numpy as np
 class ImageNetDataset(Dataset):
     def __init__(self, data_path, labels_path=None, is_train=False):
-        self.data = np.memmap(data_path, dtype='fp16', mode='r', shape=(1281152, 32, 32, 4))
+        self.data = np.memmap(data_path, dtype='float16', mode='r', shape=(1281152, 32, 32, 4))
         # basically random shuffle self.data with a seed
         rows = self.data.shape[0]
         indices = np.arange(rows)
