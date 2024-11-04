@@ -141,17 +141,18 @@ class FlowTrainer(flax.struct.PyTreeNode):
 @click.option('--max_steps', default=100_000, type=int, help='Number of training steps.')
 @click.option('--model_type', default='dit', help='dit or unet')
 @click.option('--model_size', default=10, help='10 or 50')
-@click.option('--scan_blocks', default=False, is_flag=True)
 @click.option('--denoise_timesteps', default=100, help='Number of timesteps to denoise.')
 @click.option('--_cfg_scale', default=2.0, help='Number of timesteps to denoise.')
 @click.option('--psgd', default=False, is_flag=True)
 @click.option('--repa', default=False, is_flag=True)
 @click.option('--shampoo', default=False, is_flag=True)
+@click.option('--edm2', default=False, is_flag=True)
 def main(load_dir, save_dir, fid_stats, seed, log_interval, eval_interval, save_interval,
-         batch_size, max_steps, model_type, model_size, scan_blocks, denoise_timesteps, 
-         _cfg_scale, psgd, repa, shampoo):
+         batch_size, max_steps, model_type, model_size, denoise_timesteps, 
+         _cfg_scale, psgd, repa, shampoo, edm2):
     # jax distributed training setup
     jax.distributed.initialize()
+    scan_blocks = psgd
     # Set default seed if not specified
     if seed is None:
         seed = np.random.choice(1000000)
@@ -165,7 +166,7 @@ def main(load_dir, save_dir, fid_stats, seed, log_interval, eval_interval, save_
     wandb_config = {}
     wandb_config.update({
         'project': 'flow',
-        'name': f'{model_type}_{model_size}'+("_psgd" if psgd else '')+("_repa" if repa else '')
+        'name': f'{model_type}_{model_size}'+("_psgd" if psgd else '')+("_repa" if repa else '')+("_shampoo" if shampoo else '')+("_edm2" if edm2 else ''),
     })
 
     print("Using devices", jax.local_devices())
