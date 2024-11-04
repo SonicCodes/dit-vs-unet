@@ -252,7 +252,8 @@ def main(load_dir, save_dir, fid_stats, seed, log_interval, eval_interval, save_
             beta2=model_config["shampoo_beta2"], 
             batch_axis_name='data',
             preconditioning_compute_steps=2,
-            reuse_preconditioner=False
+            reuse_preconditioner=False,
+            best_effort_memory_usage_reduction=True
         )
     else:
         tx = optax.adam(learning_rate=model_config['adam_lr'], b1=model_config['adam_beta1'], b2=model_config['adam_beta2'])
