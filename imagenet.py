@@ -9,7 +9,7 @@ from torch.utils.data import Dataset, DataLoader, distributed
 import numpy as np
 class ImageNetDataset(Dataset):
     def __init__(self, data_path, labels_path=None, is_train=False):
-        self.data = np.memmap(data_path, dtype='uint8', mode='r', shape=(1281152, 4096))
+        self.data = np.memmap(data_path, dtype='fp16', mode='r', shape=(1281152, 32, 32, 4))
         # basically random shuffle self.data with a seed
         rows = self.data.shape[0]
         indices = np.arange(rows)
@@ -33,9 +33,9 @@ class ImageNetDataset(Dataset):
     def __getitem__(self, _idx):
         idx = self.indices[_idx]
         image = self.data[idx]
-        label, label_text = self.labels[idx]
-        image = image.astype(np.float32).reshape(4, 32, 32)
-        image = (image / 255.0 - 0.5) * 24.0
+        label = self.labels[idx][0]
+        image = image.astype(np.float32).transpose(2, 0, 1)
+        # image = (image / 255.0 - 0.5) * 24.0
         return image, label#, label_text
 
 def loopy(dl):
@@ -44,8 +44,8 @@ def loopy(dl):
 
 def get_dataset(batch_size, train=False):
     seed = 19 if train else 23
-    data_path = 'inet.npy'
-    labels_path = 'inet.json'
+    data_path = 'inet.fp16.npy'
+    labels_path = 'inet.fp16.json'
     dataset = ImageNetDataset(data_path, labels_path, train)
     num_processes = jax.process_count()
     rank = jax.process_index()
